@@ -36,18 +36,6 @@ extern NSString *kAudioSessionManagerDevice_Phone;
 extern NSString *kAudioSessionManagerDevice_Speaker;
 
 @interface AudioSessionManager : NSObject
-{
-@protected
-    BOOL         mPostNotifications;
-	
-	NSString	*mMode;
-    
-	BOOL		 mBluetoothDeviceAvailable;
-	BOOL		 mHeadsetDeviceAvailable;
-    
-	NSString	*mAudioDevice;
-	NSArray		*mAvailableAudioDevices;
-}
 
 /**
  The current audio route as reported by AudioSessionGetProperty(kAudioSessionProperty_AudioRoute).
@@ -59,27 +47,27 @@ extern NSString *kAudioSessionManagerDevice_Speaker;
     - HeadsetBT
     - HeadphonesAndMicrophone
  */
-@property (readonly,assign)		NSString		*audioRoute;
+@property (nonatomic, readonly)		NSString		*audioRoute;
 
 /**
  Returns YES if a wired headset is available.
  */
-@property (readonly,assign)		BOOL			 headsetDeviceAvailable;
+@property (nonatomic, readonly)		BOOL			 headsetDeviceAvailable;
 
 /**
  Returns YES if a bluetooth device is available.
  */
-@property (readonly,assign)		BOOL			 bluetoothDeviceAvailable;
+@property (nonatomic, readonly)		BOOL			 bluetoothDeviceAvailable;
 
 /**
  Returns YES if the device's earpiece is available (always true for now).
  */
-@property (readonly,assign)		BOOL			 phoneDeviceAvailable;
+@property (nonatomic, readonly)		BOOL			 phoneDeviceAvailable;
 
 /**
  Returns YES if the device's speakerphone is available (always true for now).
  */
-@property (readonly,assign)		BOOL			 speakerDeviceAvailable;
+@property (nonatomic, readonly)		BOOL			 speakerDeviceAvailable;
 
 /**
  Returns or sets the current audio device. Valid values at this time are:
@@ -88,7 +76,7 @@ extern NSString *kAudioSessionManagerDevice_Speaker;
     - kAudioSessionManagerDevice_Phone
     - kAudioSessionManagerDevice_Speaker
  */
-@property (readwrite,assign)	NSString		*audioDevice;
+@property (nonatomic, assign)       NSString		*audioDevice;
 
 /**
  Returns a list of the available audio devices. Valid values at this time are: 
@@ -97,7 +85,7 @@ extern NSString *kAudioSessionManagerDevice_Speaker;
     - kAudioSessionManagerDevice_Phone
     - kAudioSessionManagerDevice_Speaker
  */
-@property (readonly,retain)		NSArray			*availableAudioDevices;
+@property (nonatomic, readonly)		NSArray			*availableAudioDevices;
 
 /**
  Returns the AudioSessionManager singleton, creating it if it does not already exist.
@@ -120,10 +108,5 @@ extern NSString *kAudioSessionManagerDevice_Speaker;
  @param postNotifications if DevicesAvailableChanged and AudioDeviceChanged notifications should be posted.
  */
 - (void)startAndPostNotifications:(BOOL)postNotifications;
-
-/**
- Cleanup.
- */
-- (void)stop;
 
 @end

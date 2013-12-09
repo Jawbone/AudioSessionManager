@@ -1,7 +1,0 @@
-AudioSessionManager
-
-This module routes audio output depending on device availability using the
-following priorities: bluetooth, wired headset, speaker.
-
-It also notifies interested listeners of audio change events (optional).
-

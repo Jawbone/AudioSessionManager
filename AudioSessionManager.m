@@ -20,11 +20,22 @@
 
 #import "AudioSessionManager.h"
 
-@interface AudioSessionManager ()	// private
+@interface AudioSessionManager () {	// private
+    BOOL         mPostNotifications;
+	
+	NSString	*mMode;
+    
+	BOOL		 mBluetoothDeviceAvailable;
+	BOOL		 mHeadsetDeviceAvailable;
+    
+	NSArray		*mAvailableAudioDevices;
 
-@property (readwrite,assign)		BOOL			 bluetoothDeviceAvailable;
-@property (readwrite,assign)		BOOL			 headsetDeviceAvailable;
-@property (readwrite,retain)		NSArray			*availableAudioDevices;
+	__unsafe_unretained NSString *mAudioDevice;
+}
+
+@property (nonatomic, assign)		BOOL			 bluetoothDeviceAvailable;
+@property (nonatomic, assign)		BOOL			 headsetDeviceAvailable;
+@property (nonatomic, strong)		NSArray			*availableAudioDevices;
 
 @end
 
@@ -38,8 +49,6 @@ NSString *kAudioSessionManagerDevice_Headset    = @"AudioSessionManagerDevice_He
 NSString *kAudioSessionManagerDevice_Bluetooth  = @"AudioSessionManagerDevice_Bluetooth";
 NSString *kAudioSessionManagerDevice_Phone      = @"AudioSessionManagerDevice_Phone";
 NSString *kAudioSessionManagerDevice_Speaker    = @"AudioSessionManagerDevice_Speaker";
-
-AudioSessionManager *gAudioSessionManagerInstance = nil;
 
 void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSessionPropertyID inID, UInt32 inDataSize, const void *inData);
 
@@ -62,15 +71,19 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 #pragma mark -
 #pragma mark Singleton
 
-+ (AudioSessionManager*)sharedInstance 
-{
-    if (gAudioSessionManagerInstance == nil) 
-    {
-        gAudioSessionManagerInstance = [[super allocWithZone:NULL] init];
-    }
-    
-    return gAudioSessionManagerInstance;
+#pragma mark - Singleton
+
+#define SYNTHESIZE_SINGLETON_FOR_CLASS(classname) \
++ (classname*)sharedInstance { \
+static classname* __sharedInstance; \
+static dispatch_once_t onceToken; \
+dispatch_once(&onceToken, ^{ \
+__sharedInstance = [[classname alloc] init]; \
+}); \
+return __sharedInstance; \
 }
+
+SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 
 - (id)init
 {
@@ -159,7 +172,6 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 								 &allowBluetoothInput
 								);
 		
-		
 		expectedRoute = @"HeadsetBT";
 	}	
 	else 
@@ -228,7 +240,7 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 	}
 	
 	// now, wire up our route change check...	
-	AudioSessionAddPropertyListener(kAudioSessionProperty_AudioRouteChange, &AudioSessionManager_audioRouteChangedListener, self);
+	AudioSessionAddPropertyListener(kAudioSessionProperty_AudioRouteChange, &AudioSessionManager_audioRouteChangedListener, (__bridge void *)(self));
 	
 	// Display our current route...	
 	NSLogDebug(@"current route: %@", self.audioRoute);
@@ -407,11 +419,6 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 	NSLogDebug(@"audioDevice = %@", mAudioDevice);
 }
 
-- (void)stop
-{
-	// nothing to do...
-}
-
 #pragma mark public methods/properties
 
 - (BOOL)changeMode:(NSString *)value
@@ -431,7 +438,7 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 	
 	AudioSessionGetProperty(kAudioSessionProperty_AudioRoute, &dataSize, &data);
 	
-	return (data != NULL && CFStringGetLength(data) > 0) ? (NSString *)data : @"Unknown";
+	return (data != NULL && CFStringGetLength(data) > 0) ? (NSString *)CFBridgingRelease(data) : @"Unknown";
 }
 
 - (void)setBluetoothDeviceAvailable:(BOOL)value
@@ -498,46 +505,10 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 		if (self.phoneDeviceAvailable)
 			[devices addObject:kAudioSessionManagerDevice_Phone];
 		
-		self.availableAudioDevices = [[devices copy] autorelease];
-		
-		[devices release];
-		devices = nil;
+		self.availableAudioDevices = devices;
 	}
 	
-	return [[mAvailableAudioDevices retain] autorelease];
-}
-
-#pragma mark -
-#pragma mark Singleton management
-
-+ (id)allocWithZone:(NSZone *)zone 
-{
-    return [[self sharedInstance] retain];
-}
-
-- (id)copyWithZone:(NSZone *)zone 
-{
-    return self;
-}
-
-- (id)retain 
-{
-    return self;
-}
-
-- (NSUInteger)retainCount 
-{
-    return NSUIntegerMax;  //denotes an object that cannot be released
-}
-
-- (void)release 
-{
-    //do nothing
-}
-
-- (id)autorelease 
-{
-    return self;
+	return mAvailableAudioDevices;
 }
 
 @end
@@ -546,7 +517,7 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 
 void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSessionPropertyID inID, UInt32 inDataSize, const void *inData)
 {
-	AudioSessionManager *instance = (AudioSessionManager *)inClientData;
+	AudioSessionManager *instance = (__bridge AudioSessionManager *)inClientData;
 	
 	CFDictionaryRef routeChangeDictionary = inData;
 	
@@ -565,6 +536,6 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 	
 	// pass it off to our Objective-C handler...
 	
-	[instance onAudioRouteChangedWithReason:routeChangeReason oldRoute:(NSString *)oldRoute];
+	[instance onAudioRouteChangedWithReason:routeChangeReason oldRoute:(__bridge NSString *)oldRoute];
 }
 
