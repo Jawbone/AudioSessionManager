@@ -183,7 +183,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
         if ([[output portType] isEqualToString:AVAudioSessionPortHeadphones]) {
             self.headsetDeviceAvailable = YES;
             [self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
-        } else if ([[output portType] isEqualToString:AVAudioSessionPortBluetoothHFP] || [[output portType] isEqualToString:AVAudioSessionPortBluetoothA2DP]) {
+        } else if ([self isBluetoothDevice:[output portType]]) {
             self.bluetoothDeviceAvailable = YES;
             [self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
         } else {
@@ -194,7 +194,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
     // Condition: iOS7 and Bluetooth input available
     if ([[UIDevice currentDevice].systemVersion integerValue] >= 7) {
         for (AVAudioSessionPortDescription *input in [audioSession availableInputs]){
-            if ([[input portType] isEqualToString:AVAudioSessionPortBluetoothHFP]){
+            if ([self isBluetoothDevice:[input portType]]){
                 self.bluetoothDeviceAvailable = YES;
                 break;
             }
@@ -408,7 +408,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
                 BOOL showBluetooth = NO;
                 NSArray *inputs = [[AVAudioSession sharedInstance] availableInputs];
                 for (AVAudioSessionPortDescription *input in inputs){
-                    if ([[input portType] isEqualToString:AVAudioSessionPortBluetoothHFP]){
+                    if ([self isBluetoothDevice:[input portType]]){
                         showBluetooth = YES;
                         break;
                     }
@@ -474,9 +474,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
         return kAudioSessionManagerDevice_Speaker;
     } else if ([output isEqualToString:AVAudioSessionPortHeadphones]) {
         return kAudioSessionManagerDevice_Headset;
-    } else if ([output isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
-               [output isEqualToString:AVAudioSessionPortBluetoothHFP] ||
-               [output isEqualToString:AVAudioSessionPortBluetoothLE]) {
+    } else if ([self isBluetoothDevice:output]) {
         return kAudioSessionManagerDevice_Bluetooth;
     } else {
         return @"Unknown Device";
@@ -580,3 +578,4 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 	
 	[instance onAudioRouteChangedWithReason:routeChangeReason oldRoute:(__bridge NSString *)oldRoute];
 }
+
