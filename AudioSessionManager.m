@@ -6,9 +6,9 @@
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
 //  You may obtain a copy of the License at
-//  
+//
 //  http://www.apache.org/licenses/LICENSE-2.0
-//  
+//
 //  Unless required by applicable law or agreed to in writing, software
 //  distributed under the License is distributed on an "AS IS" BASIS,
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -29,7 +29,7 @@
 	BOOL		 mHeadsetDeviceAvailable;
     
 	NSArray		*mAvailableAudioDevices;
-
+    
 	__unsafe_unretained NSString *mAudioDevice;
 }
 
@@ -41,6 +41,8 @@
 
 NSString *kAudioSessionManagerDevicesAvailableChangedNotification = @"AudioSessionManagerDevicesAvailableChangedNotification";
 NSString *kAudioSessionManagerAudioDeviceChangedNotification      = @"AudioSessionManagerAudioDeviceChangedNotification";
+NSString *kAudioSessionManagerShowBluetoothNotification           = @"AudioSessionManagerShowBluetoothNotification";
+NSString *kAudioSessionManagerHideBluetoothNotification           = @"AudioSessionManagerHideBluetoothNotification";
 
 NSString *kAudioSessionManagerMode_Record       = @"AudioSessionManagerMode_Record";
 NSString *kAudioSessionManagerMode_Playback     = @"AudioSessionManagerMode_Playback";
@@ -54,11 +56,11 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 
 // use normal logging if custom macros don't exist
 #ifndef NSLogWarn
-    #define NSLogWarn NSLog
+#define NSLogWarn NSLog
 #endif
 
 #ifndef NSLogError
-    #define NSLogError NSLog
+#define NSLogError NSLog
 #endif
 
 @implementation AudioSessionManager
@@ -103,7 +105,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
         return;
     
 	NSLogDebug(@"Posting Notification: %@", name);
-	[[NSNotificationCenter defaultCenter] postNotificationName:name object:self];	
+	[[NSNotificationCenter defaultCenter] postNotificationName:name object:self];
 }
 
 - (BOOL)configureAudioSession
@@ -113,136 +115,43 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 	AVAudioSession *audioSession = [AVAudioSession sharedInstance];
 	NSError *err;
 	
-	// close down our current session...	
+	// close down our current session...
 	[audioSession setActive:NO error:nil];
 	
-    if ((mMode == kAudioSessionManagerMode_Record) && !audioSession.inputIsAvailable)
+    if ((mMode == kAudioSessionManagerMode_Record) && !audioSession.inputAvailable)
     {
 		NSLogWarn(@"device does not support recording");
 		return NO;
     }
-        
+    
     /*
      * Need to always use AVAudioSessionCategoryPlayAndRecord to redirect output audio per
      * the "Audio Session Programming Guide", so we only use AVAudioSessionCategoryPlayback when
      * !inputIsAvailable - which should only apply to iPod Touches without external mics.
      */
-    NSString *audioCat = ((mMode == kAudioSessionManagerMode_Playback) && !audioSession.inputIsAvailable) ? 
-        AVAudioSessionCategoryPlayback : AVAudioSessionCategoryPlayAndRecord;
+    NSString *audioCat = ((mMode == kAudioSessionManagerMode_Playback) && !audioSession.inputAvailable) ?
+    AVAudioSessionCategoryPlayback : AVAudioSessionCategoryPlayAndRecord;
     
-	if (![audioSession setCategory:audioCat error:&err])
+	if (![audioSession setCategory:audioCat withOptions:AVAudioSessionCategoryOptionAllowBluetooth error:&err])
 	{
 		NSLogWarn(@"unable to set audioSession category: %@", err);
 		return NO;
 	}
 	
-	// Set session options based on the requested mode...	
-	NSString *expectedRoute = nil;
-	
-	if (mAudioDevice == kAudioSessionManagerDevice_Phone)
-	{
-		expectedRoute = @"ReceiverAndMicrophone";
-		// this should be the default.
-		// if they have a headset plugged in it will go to the headset, but that's probably fine.
-	}	
-	else if (mAudioDevice == kAudioSessionManagerDevice_Speaker)
-	{
-		UInt32 overrideAudioRoute = kAudioSessionOverrideAudioRoute_Speaker;
-		
-		AudioSessionSetProperty (
-								 kAudioSessionProperty_OverrideAudioRoute,
-								 sizeof (overrideAudioRoute),
-								 &overrideAudioRoute
-								);
-		
-		expectedRoute = audioSession.inputIsAvailable ? @"SpeakerAndMicrophone" : @"Speaker";
-	}	
-	else if (mAudioDevice == kAudioSessionManagerDevice_Headset)
-	{
-		// is there aything to do here?
-		expectedRoute = @"HeadsetInOut";	// could also be HeadphonesAndMicrophone...
-	}	
-	else if (mAudioDevice == kAudioSessionManagerDevice_Bluetooth)
-	{
-		UInt32 allowBluetoothInput = 1;
-		
-		AudioSessionSetProperty (
-								 kAudioSessionProperty_OverrideCategoryEnableBluetoothInput,
-								 sizeof (allowBluetoothInput),
-								 &allowBluetoothInput
-								);
-		
-		expectedRoute = @"HeadsetBT";
-	}	
-	else 
-	{
-		NSLogError(@"Invalid audioDevice: %@", mAudioDevice);
-		return NO;
-	}
-	
-	// If no bluetooth device is connected, request bluetooth so we will get device changed notifications...
-	// OR if the user has actually selected bluetooth...	
-	if (!self.bluetoothDeviceAvailable || mAudioDevice == kAudioSessionManagerDevice_Bluetooth)
-	{
-		UInt32 allowBluetoothInput = 1;
-		
-		AudioSessionSetProperty (
-								 kAudioSessionProperty_OverrideCategoryEnableBluetoothInput,
-								 sizeof (allowBluetoothInput),
-								 &allowBluetoothInput
-								);
-		
-	}
-	
-	// Set our session to active...	
+    // Set our session to active...
 	if (![audioSession setActive:YES error:&err])
 	{
 		NSLogWarn(@"unable to set audio session active: %@", err);
 		return NO;
 	}
-	
-	// Set to speaker if needed...	
+    
 	if (mAudioDevice == kAudioSessionManagerDevice_Speaker)
 	{
-		UInt32 overrideAudioRoute = kAudioSessionOverrideAudioRoute_Speaker;
-		
-		AudioSessionSetProperty (
-								 kAudioSessionProperty_OverrideAudioRoute,
-								 sizeof (overrideAudioRoute),
-								 &overrideAudioRoute
-								);
+        // replace AudiosessionSetProperty (deprecated from iOS7) with AVAudioSession overrideOutputAudioPort
+		[audioSession overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker error:&err];
 	}
 	
-	// Validate that we ended up with the route we expected...	    
-	if (![self.audioRoute isEqualToString:expectedRoute] && 
-        !([expectedRoute isEqualToString:@"HeadsetInOut"] && [self.audioRoute isEqualToString:@"HeadphonesAndMicrophone"]))
-	{
-		NSLogError(@"Selecting %@: expected route %@, but got route %@", mAudioDevice, expectedRoute, self.audioRoute);
-		
-		// We may have lost a route without knowing about it, if so, make it go away...		
-		if ([expectedRoute isEqualToString:@"HeadsetBT"])
-		{
-			self.bluetoothDeviceAvailable = NO;
-			
-			// technically recursive, but we shouldn't loop.
-			
-			self.audioDevice = kAudioSessionManagerDevice_Speaker;	// switch to the speaker...
-		}
-		
-		if ([expectedRoute hasPrefix:@"Head"])
-		{
-			self.headsetDeviceAvailable = NO;
-
-			// technically recursive, but we shouldn't loop.
-	
-			self.audioDevice = kAudioSessionManagerDevice_Speaker;	// switch to the speaker...
-		}			
-	}
-	
-	// now, wire up our route change check...	
-	AudioSessionAddPropertyListener(kAudioSessionProperty_AudioRouteChange, &AudioSessionManager_audioRouteChangedListener, (__bridge void *)(self));
-	
-	// Display our current route...	
+	// Display our current route...
 	NSLogDebug(@"current route: %@", self.audioRoute);
 	
 	return YES;
@@ -250,38 +159,50 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 
 - (BOOL)detectAvailableDevices
 {
-	// called on startup to initialize the devices that are available...	
+	// called on startup to initialize the devices that are available...
 	NSLogDebug(@"detectAvailableDevices");
 	
 	AVAudioSession *audioSession = [AVAudioSession sharedInstance];
 	NSError *err;
 	
-	// close down our current session...	
+	// close down our current session...
 	[audioSession setActive:NO error:nil];
-	
-	// Open a session and see what our default is...	
-	if (![audioSession setCategory:AVAudioSessionCategoryPlayAndRecord error:&err])
-	{
+    
+    // start a new audio session. Without activation, the default route will always be (inputs: null, outputs: Speaker)
+    [audioSession setActive:YES error:nil];
+    
+	// Open a session and see what our default is...
+	if (![audioSession setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:AVAudioSessionCategoryOptionAllowBluetooth error:&err]) {
 		NSLogWarn(@"unable to set audioSession category: %@", err);
 		return NO;
 	}
 	
-	// Check for a wired headset...	
-	self.headsetDeviceAvailable = [self.audioRoute isEqualToString:@"HeadsetInOut"] || [self.audioRoute isEqualToString:@"HeadphonesAndMicrophone"];
-	
+	// Check for a wired headset...
+    AVAudioSessionRouteDescription *currentRoute = [audioSession currentRoute];
+    for (AVAudioSessionPortDescription *output in currentRoute.outputs) {
+        if ([[output portType] isEqualToString:AVAudioSessionPortHeadphones]) {
+            self.headsetDeviceAvailable = YES;
+            [self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
+        } else if ([[output portType] isEqualToString:AVAudioSessionPortBluetoothHFP] || [[output portType] isEqualToString:AVAudioSessionPortBluetoothA2DP]) {
+            self.bluetoothDeviceAvailable = YES;
+            [self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
+        } else {
+            [self setAudioDeviceValue:kAudioSessionManagerDevice_Speaker];
+        }
+    }
+    // In case both headphones and bluetooth are connected, detect bluetooth by inputs
+    // Condition: iOS7 and Bluetooth input available
+    if ([[UIDevice currentDevice].systemVersion integerValue] >= 7) {
+        for (AVAudioSessionPortDescription *input in [audioSession availableInputs]){
+            if ([[input portType] isEqualToString:AVAudioSessionPortBluetoothHFP]){
+                self.bluetoothDeviceAvailable = YES;
+                break;
+            }
+        }
+    }
+    
 	if (self.headsetDeviceAvailable)
 		NSLogDebug(@"Found Headset");
-	
-	// Check for a bluetooth headset...	
-	UInt32 allowBluetoothInput = 1;
-	
-	AudioSessionSetProperty (
-							 kAudioSessionProperty_OverrideCategoryEnableBluetoothInput,
-							 sizeof (allowBluetoothInput),
-							 &allowBluetoothInput
-							);
-	
-	self.bluetoothDeviceAvailable = [self.audioRoute isEqualToString:@"HeadsetBT"];
 	
 	if (self.bluetoothDeviceAvailable)
 		NSLogDebug(@"Found Bluetooth");
@@ -308,92 +229,209 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 	{
 		NSLogDebug(@"device added: %@", newRoute);
 		
-		if ([newRoute isEqualToString:@"HeadsetBT"])
+		if ([newRoute isEqualToString:kAudioSessionManagerDevice_Bluetooth])
 		{
 			self.bluetoothDeviceAvailable = YES;
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
 			[self configureAudioSession];
-		}		
-		else if ([newRoute isEqualToString:@"HeadsetInOut"] || [newRoute isEqualToString:@"HeadphonesAndMicrophone"])
+		}
+		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Headset])
 		{
 			self.headsetDeviceAvailable = YES;
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
 			[self configureAudioSession];
-		}		
-		else 
+		}
+		else
 		{
 			NSLogWarn(@"Unknown audioDevice added: %@", newRoute);
-		}		
-	}	
+		}
+	}
 	else if ((kAudioSessionRouteChangeReason_OldDeviceUnavailable == reason)
-                || (kAudioSessionRouteChangeReason_NoSuitableRouteForCategory == reason)    // ex: iPod Touch with headset mic unplugged
-				|| reason > 100)                                                            // Sometimes we get a HUGE number when disconnecting BT, wo let's roll with it.
+             || (kAudioSessionRouteChangeReason_NoSuitableRouteForCategory == reason)    // ex: iPod Touch with headset mic unplugged
+             || reason > 100)                                                            // Sometimes we get a HUGE number when disconnecting BT, wo let's roll with it.
 	{
-		NSLogDebug(@"device removed: %@", oldRoute);		
+		NSLogDebug(@"device removed: %@", oldRoute);
 		
 		//Need to remove the old device first, else the set of available devices is wrong later
 		
-		// remove the old device from our available devices...		
+		// remove the old device from our available devices...
 		if ([oldRoute isEqualToString:@"HeadsetBT"])
 		{
 			self.bluetoothDeviceAvailable = NO;
-		}		
+		}
 		else if ([oldRoute isEqualToString:@"HeadsetInOut"] || [oldRoute isEqualToString:@"HeadphonesAndMicrophone"])
 		{
 			self.headsetDeviceAvailable = NO;
 		}
-		else 
+		else
 		{
 			NSLogWarn(@"Unknown audioDevice removed: %@", oldRoute);
-		}		
+		}
 		
-		// set the audioDevice based on the new route....		
-		if ([newRoute isEqualToString:@"HeadsetBT"])	
+		// set the audioDevice based on the new route....
+		if ([newRoute isEqualToString:kAudioSessionManagerDevice_Bluetooth])
 		{
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
 			[self configureAudioSession];
-		}		
-		else if ([newRoute isEqualToString:@"HeadsetInOut"] || [newRoute isEqualToString:@"HeadphonesAndMicrophone"])
+		}
+		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Headset])
 		{
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
 			[self configureAudioSession];
-		}		
-		else if ([newRoute isEqualToString:@"ReceiverAndMicrophone"])
+		}
+		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Phone])
 		{
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Phone];
 			[self configureAudioSession];
-		}		
-		else if ([newRoute isEqualToString:@"SpeakerAndMicrophone"] || [newRoute isEqualToString:@"Speaker"])
+		}
+		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Speaker])
 		{
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Speaker];
 			[self configureAudioSession];
-		}		
-		else 
+		}
+		else
 		{
 			NSLogWarn(@"Unknown new route: %@", newRoute);
-		}		
+		}
 	}
 	else
 	{
 		NSLogDebug(@"Changed route for some reason not related to adding or removing devices");
 		
-		if ([newRoute isEqualToString:@"HeadsetBT"])			
+		if ([newRoute isEqualToString:kAudioSessionManagerDevice_Bluetooth]) {
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
+        }
 		
-		else if ([newRoute isEqualToString:@"HeadsetInOut"] || [newRoute isEqualToString:@"HeadphonesAndMicrophone"])
+		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Headset]) {
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
+        }
 		
-		else if ([newRoute isEqualToString:@"ReceiverAndMicrophone"])
+		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Phone]) {
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Phone];
+        }
 		
-		else if ([newRoute isEqualToString:@"SpeakerAndMicrophone"] || [newRoute isEqualToString:@"Speaker"])
+		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Speaker]) {
 			[self setAudioDeviceValue:kAudioSessionManagerDevice_Speaker];
-		
-		else 
-		{
+		}
+        
+		else {
 			NSLogWarn(@"Unknown new route: %@", newRoute);
-		}		
+		}
 	}
+}
+
+// Replace onAudioRouteChangedWithReason with currentRouteChanged, supports from iOS6
+- (void)currentRouteChanged:(NSNotification *)notification
+{
+    NSInteger changeReason = [[notification.userInfo objectForKey:AVAudioSessionRouteChangeReasonKey] integerValue];
+    
+    AVAudioSessionRouteDescription *oldRoute = [notification.userInfo objectForKey:AVAudioSessionRouteChangePreviousRouteKey];
+    NSString *oldOutput = [[oldRoute.outputs objectAtIndex:0] portType];
+    AVAudioSessionRouteDescription *newRoute = [[AVAudioSession sharedInstance] currentRoute];
+    NSString *newOutput = [[newRoute.outputs objectAtIndex:0] portType];
+    
+    switch (changeReason) {
+        case AVAudioSessionRouteChangeReasonOldDeviceUnavailable:
+            if ([oldOutput isEqualToString:AVAudioSessionPortHeadphones]) {
+                
+                self.headsetDeviceAvailable = NO;
+                // Special Scenario:
+                // when headphones are plugged in before the call and plugged out during the call
+                // route will change to {input: MicrophoneBuiltIn, output: Receiver}
+                // manually refresh session and support all devices again.
+                [[AVAudioSession sharedInstance] setActive:NO error:nil];
+                [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:AVAudioSessionCategoryOptionAllowBluetooth error:nil];
+                [[AVAudioSession sharedInstance] setMode:AVAudioSessionModeVoiceChat error:nil];
+                [[AVAudioSession sharedInstance] setActive:YES error:nil];
+                
+                
+            } else if ([self isBluetoothDevice:oldOutput]) {
+                
+                self.bluetoothDeviceAvailable = NO;
+                
+                // Additional checking for iOS7 devices (more accurate)
+                // when multiple blutooth devices connected, one is no longer available does not mean no bluetooth available
+                if ([[UIDevice currentDevice].systemVersion integerValue] >= 7) {
+                    BOOL showBluetooth = NO;
+                    NSArray *inputs = [[AVAudioSession sharedInstance] availableInputs];
+                    for (AVAudioSessionPortDescription *input in inputs){
+                        if ([self isBluetoothDevice:[input portType]]){
+                            showBluetooth = YES;
+                            break;
+                        }
+                    }
+                    if (!showBluetooth) {
+                        [self postNotification:kAudioSessionManagerHideBluetoothNotification];
+                    }
+                }
+            }
+            // set the audioDevice based on the new route....
+            if ([self isBluetoothDevice:newOutput]) {
+                
+                [self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
+                
+            } else if ([newOutput isEqualToString:AVAudioSessionPortHeadphones]) {
+                
+                [self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
+                
+            } else if ([newOutput isEqualToString:AVAudioSessionPortBuiltInReceiver]) {
+                
+                [self setAudioDeviceValue:kAudioSessionManagerDevice_Phone];
+                
+            } else if ([newOutput isEqualToString:AVAudioSessionPortBuiltInSpeaker]) {
+                
+                [self setAudioDeviceValue:kAudioSessionManagerDevice_Speaker];
+                
+            } else {
+                NSLogWarn(@"Unknown new route: %@", newRoute);
+            }
+            break;
+            
+        case AVAudioSessionRouteChangeReasonNewDeviceAvailable:
+            
+            if ([self isBluetoothDevice:newOutput]) {
+                
+                self.bluetoothDeviceAvailable = YES;
+                [self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
+                [self postNotification:kAudioSessionManagerShowBluetoothNotification];
+                
+            } else if ([newOutput isEqualToString:AVAudioSessionPortHeadphones]) {
+                
+                self.headsetDeviceAvailable = YES;
+                [self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
+            }
+            break;
+            
+        case AVAudioSessionRouteChangeReasonOverride:
+            
+            if ([[UIDevice currentDevice].systemVersion integerValue] >= 7) {
+                BOOL showBluetooth = NO;
+                NSArray *inputs = [[AVAudioSession sharedInstance] availableInputs];
+                for (AVAudioSessionPortDescription *input in inputs){
+                    if ([[input portType] isEqualToString:AVAudioSessionPortBluetoothHFP]){
+                        showBluetooth = YES;
+                        break;
+                    }
+                }
+                if (!showBluetooth) {
+                    [self postNotification:kAudioSessionManagerHideBluetoothNotification];
+                }
+            } else if ([newOutput isEqualToString:AVAudioSessionPortBuiltInReceiver]) {
+                
+                [self postNotification:kAudioSessionManagerHideBluetoothNotification];
+            }
+            break;
+            
+        default:
+            break;
+    }
+}
+
+- (BOOL)isBluetoothDevice:(NSString*)portType {
+    
+    return ([portType isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
+            [portType isEqualToString:AVAudioSessionPortBluetoothHFP] ||
+            [portType isEqualToString:AVAudioSessionPortBluetoothLE]);
 }
 
 #pragma mark public methods
@@ -404,19 +442,13 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
     
 	[self detectAvailableDevices];
 	
-	// Assign a default output device...	
-	if (self.bluetoothDeviceAvailable)
-		[self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
-	
-	else if (self.headsetDeviceAvailable)
-		[self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
-	
-	else
-		[self setAudioDeviceValue:kAudioSessionManagerDevice_Speaker];
-	
 	[self configureAudioSession];
 	
 	NSLogDebug(@"audioDevice = %@", mAudioDevice);
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(currentRouteChanged:)
+                                                 name:AVAudioSessionRouteChangeNotification object:nil];
 }
 
 #pragma mark public methods/properties
@@ -433,12 +465,22 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 
 - (NSString *)audioRoute
 {
-	CFStringRef data = NULL;
-	UInt32 dataSize = sizeof(data);
-	
-	AudioSessionGetProperty(kAudioSessionProperty_AudioRoute, &dataSize, &data);
-	
-	return (data != NULL && CFStringGetLength(data) > 0) ? (NSString *)CFBridgingRelease(data) : @"Unknown";
+	AVAudioSessionRouteDescription *currentRoute = [[AVAudioSession sharedInstance] currentRoute];
+    NSString *output = [[currentRoute.outputs objectAtIndex:0] portType];
+    
+    if ([output isEqualToString:AVAudioSessionPortBuiltInReceiver]) {
+        return kAudioSessionManagerDevice_Phone;
+    } else if ([output isEqualToString:AVAudioSessionPortBuiltInSpeaker]) {
+        return kAudioSessionManagerDevice_Speaker;
+    } else if ([output isEqualToString:AVAudioSessionPortHeadphones]) {
+        return kAudioSessionManagerDevice_Headset;
+    } else if ([output isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
+               [output isEqualToString:AVAudioSessionPortBluetoothHFP] ||
+               [output isEqualToString:AVAudioSessionPortBluetoothLE]) {
+        return kAudioSessionManagerDevice_Bluetooth;
+    } else {
+        return @"Unknown Device";
+    }
 }
 
 - (void)setBluetoothDeviceAvailable:(BOOL)value
@@ -449,7 +491,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 	mBluetoothDeviceAvailable = value;
 	
 	self.availableAudioDevices = nil;
-		
+    
 	[self postNotification:kAudioSessionManagerDevicesAvailableChangedNotification];
 }
 
@@ -495,13 +537,13 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 		
 		if (self.bluetoothDeviceAvailable)
 			[devices addObject:kAudioSessionManagerDevice_Bluetooth];
-
+        
 		if (self.headsetDeviceAvailable)
 			[devices addObject:kAudioSessionManagerDevice_Headset];
-
+        
 		if (self.speakerDeviceAvailable)
 			[devices addObject:kAudioSessionManagerDevice_Speaker];
-
+        
 		if (self.phoneDeviceAvailable)
 			[devices addObject:kAudioSessionManagerDevice_Phone];
 		
@@ -538,4 +580,3 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 	
 	[instance onAudioRouteChangedWithReason:routeChangeReason oldRoute:(__bridge NSString *)oldRoute];
 }
-
