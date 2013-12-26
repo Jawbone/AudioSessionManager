@@ -24,11 +24,6 @@
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
 
-extern NSString *kAudioSessionManagerDevicesAvailableChangedNotification;
-extern NSString *kAudioSessionManagerAudioDeviceChangedNotification;
-extern NSString *kAudioSessionManagerShowBluetoothNotification;
-extern NSString *kAudioSessionManagerHideBluetoothNotification;
-
 extern NSString *kAudioSessionManagerMode_Record;
 extern NSString *kAudioSessionManagerMode_Playback;
 
@@ -49,7 +44,7 @@ extern NSString *kAudioSessionManagerDevice_Speaker;
     - HeadsetBT
     - HeadphonesAndMicrophone
  */
-@property (nonatomic, readonly)     NSString        *audioRoute;
+@property (nonatomic, copy, readonly)     NSString        *audioRoute;
 
 /**
  Returns YES if a wired headset is available.
