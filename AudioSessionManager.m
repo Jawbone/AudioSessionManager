@@ -63,6 +63,10 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
 #define NSLogError NSLog
 #endif
 
+#define LOG_LEVEL 3
+#define NSLogDebug(frmt, ...)    do{ if(LOG_LEVEL >= 4) NSLog((frmt), ##__VA_ARGS__); } while(0)
+
+
 @implementation AudioSessionManager
 
 @synthesize headsetDeviceAvailable      = mHeadsetDeviceAvailable;
