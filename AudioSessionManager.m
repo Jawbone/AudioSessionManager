@@ -436,8 +436,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 - (BOOL)isBluetoothDevice:(NSString*)portType {
     
     return ([portType isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
-            [portType isEqualToString:AVAudioSessionPortBluetoothHFP] ||
-            [portType isEqualToString:AVAudioSessionPortBluetoothLE]);
+            [portType isEqualToString:AVAudioSessionPortBluetoothHFP]);
 }
 
 #pragma mark public methods
