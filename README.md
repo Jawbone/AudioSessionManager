@@ -9,7 +9,7 @@ It also notifies interested listeners of audio change events (optional).
 
 ## Requirements
 
-The only requirement to use this module is an ARC-based iOS 5+ project.
+The only requirement to use this module is an ARC-based iOS 6+ project.
 
 # Documentation
 
