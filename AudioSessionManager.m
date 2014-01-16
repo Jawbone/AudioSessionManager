@@ -134,7 +134,7 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
     NSString *audioCat = ((mMode == kAudioSessionManagerMode_Playback) && !audioSession.inputAvailable) ?
     AVAudioSessionCategoryPlayback : AVAudioSessionCategoryPlayAndRecord;
     
-	if (![audioSession setCategory:audioCat withOptions:AVAudioSessionCategoryOptionAllowBluetooth error:&err])
+	if (![audioSession setCategory:audioCat withOptions:((mAudioDevice == kAudioSessionManagerDevice_Bluetooth) ? AVAudioSessionCategoryOptionAllowBluetooth : 0) error:&err])
 	{
 		NSLogWarn(@"unable to set audioSession category: %@", err);
 		return NO;
@@ -514,6 +514,8 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 	mAudioDevice = value;
 	
 	[self configureAudioSession];
+    
+    mAudioDevice = self.audioRoute;
 }
 
 - (BOOL)phoneDeviceAvailable

@@ -36,15 +36,13 @@ extern NSString *kAudioSessionManagerDevice_Speaker;
 
 /**
  The current audio route as reported by AudioSessionGetProperty(kAudioSessionProperty_AudioRoute).
- Valid values at this time are: 
-    - ReceiverAndMicrophone
-    - SpeakerAndMicrophone
-    - Speaker
-    - HeadsetInOut
-    - HeadsetBT
-    - HeadphonesAndMicrophone
+ Valid values at this time are:
+ - kAudioSessionManagerDevice_Bluetooth
+ - kAudioSessionManagerDevice_Headset
+ - kAudioSessionManagerDevice_Phone
+ - kAudioSessionManagerDevice_Speaker
  */
-@property (nonatomic, copy, readonly)     NSString        *audioRoute;
+@property (nonatomic, readonly)     NSString        *audioRoute;
 
 /**
  Returns YES if a wired headset is available.
