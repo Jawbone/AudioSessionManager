@@ -98,10 +98,8 @@ extern NSString *kAudioSessionManagerDevice_Speaker;
  Initialize by detecting all available devices and selecting one based on the following priority:
     - bluetooth
     - headset
-    - speaker
- 
- @param postNotifications if DevicesAvailableChanged and AudioDeviceChanged notifications should be posted.
+    - speaker 
  */
-- (void)startAndPostNotifications:(BOOL)postNotifications;
+- (void)start;
 
 @end

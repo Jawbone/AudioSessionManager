@@ -21,8 +21,6 @@
 #import "AudioSessionManager.h"
 
 @interface AudioSessionManager () {	// private
-    BOOL         mPostNotifications;
-	
 	NSString	*mMode;
     
 	BOOL		 mBluetoothDeviceAvailable;
@@ -47,9 +45,6 @@ NSString *kAudioSessionManagerDevice_Bluetooth  = @"AudioSessionManagerDevice_Bl
 NSString *kAudioSessionManagerDevice_Phone      = @"AudioSessionManagerDevice_Phone";
 NSString *kAudioSessionManagerDevice_Speaker    = @"AudioSessionManagerDevice_Speaker";
 
-
-void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSessionPropertyID inID, UInt32 inDataSize, const void *inData);
-
 // use normal logging if custom macros don't exist
 #ifndef NSLogWarn
     #define NSLogWarn NSLog
@@ -63,7 +58,6 @@ void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSess
     #define LOG_LEVEL 3
     #define NSLogDebug(frmt, ...)    do{ if(LOG_LEVEL >= 4) NSLog((frmt), ##__VA_ARGS__); } while(0)
 #endif
-
 
 @implementation AudioSessionManager
 
@@ -100,15 +94,6 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 }
 
 #pragma mark private functions
-
-- (void)postNotification:(NSString *)name
-{
-    if (!mPostNotifications)
-        return;
-    
-	NSLogDebug(@"Posting Notification: %@", name);
-	[[NSNotificationCenter defaultCenter] postNotificationName:name object:self];
-}
 
 - (BOOL)configureAudioSession
 {
@@ -220,108 +205,6 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 	}
 }
 
-- (void)onAudioRouteChangedWithReason:(int)reason oldRoute:(NSString *)oldRoute
-{
-	NSString *newRoute = self.audioRoute;
-	
-	NSLogDebug(@"onAudioRouteChangedWithReason:%d oldRoute:\"%@\" newRoute:\"%@\"", reason, oldRoute, newRoute);
-	
-	if (reason == kAudioSessionRouteChangeReason_NewDeviceAvailable)
-	{
-		NSLogDebug(@"device added: %@", newRoute);
-		
-		if ([newRoute isEqualToString:kAudioSessionManagerDevice_Bluetooth])
-		{
-			self.bluetoothDeviceAvailable = YES;
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
-			[self configureAudioSession];
-		}
-		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Headset])
-		{
-			self.headsetDeviceAvailable = YES;
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
-			[self configureAudioSession];
-		}
-		else
-		{
-			NSLogWarn(@"Unknown audioDevice added: %@", newRoute);
-		}
-	}
-	else if ((kAudioSessionRouteChangeReason_OldDeviceUnavailable == reason)
-             || (kAudioSessionRouteChangeReason_NoSuitableRouteForCategory == reason)    // ex: iPod Touch with headset mic unplugged
-             || reason > 100)                                                            // Sometimes we get a HUGE number when disconnecting BT, wo let's roll with it.
-	{
-		NSLogDebug(@"device removed: %@", oldRoute);
-		
-		//Need to remove the old device first, else the set of available devices is wrong later
-		
-		// remove the old device from our available devices...
-		if ([oldRoute isEqualToString:@"HeadsetBT"])
-		{
-			self.bluetoothDeviceAvailable = NO;
-		}
-		else if ([oldRoute isEqualToString:@"HeadsetInOut"] || [oldRoute isEqualToString:@"HeadphonesAndMicrophone"])
-		{
-			self.headsetDeviceAvailable = NO;
-		}
-		else
-		{
-			NSLogWarn(@"Unknown audioDevice removed: %@", oldRoute);
-		}
-		
-		// set the audioDevice based on the new route....
-		if ([newRoute isEqualToString:kAudioSessionManagerDevice_Bluetooth])
-		{
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
-			[self configureAudioSession];
-		}
-		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Headset])
-		{
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
-			[self configureAudioSession];
-		}
-		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Phone])
-		{
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Phone];
-			[self configureAudioSession];
-		}
-		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Speaker])
-		{
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Speaker];
-			[self configureAudioSession];
-		}
-		else
-		{
-			NSLogWarn(@"Unknown new route: %@", newRoute);
-		}
-	}
-	else
-	{
-		NSLogDebug(@"Changed route for some reason not related to adding or removing devices");
-		
-		if ([newRoute isEqualToString:kAudioSessionManagerDevice_Bluetooth]) {
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Bluetooth];
-        }
-		
-		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Headset]) {
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Headset];
-        }
-		
-		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Phone]) {
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Phone];
-        }
-		
-		else if ([newRoute isEqualToString:kAudioSessionManagerDevice_Speaker]) {
-			[self setAudioDeviceValue:kAudioSessionManagerDevice_Speaker];
-		}
-        
-		else {
-			NSLogWarn(@"Unknown new route: %@", newRoute);
-		}
-	}
-}
-
-// Replace onAudioRouteChangedWithReason with currentRouteChanged, supports from iOS6
 - (void)currentRouteChanged:(NSNotification *)notification
 {
     AVAudioSession *audioSession = [AVAudioSession sharedInstance];
@@ -441,10 +324,8 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 
 #pragma mark public methods
 
-- (void)startAndPostNotifications:(BOOL)postNotifications
+- (void)start
 {
-    mPostNotifications = postNotifications;
-    
 	[self detectAvailableDevices];
 	
 	[self configureAudioSession];
@@ -553,30 +434,4 @@ SYNTHESIZE_SINGLETON_FOR_CLASS(AudioSessionManager);
 }
 
 @end
-
-#pragma mark Listener Thunks (C)
-
-void AudioSessionManager_audioRouteChangedListener(void *inClientData, AudioSessionPropertyID inID, UInt32 inDataSize, const void *inData)
-{
-	AudioSessionManager *instance = (__bridge AudioSessionManager *)inClientData;
-	
-	CFDictionaryRef routeChangeDictionary = inData;
-	
-	// extract the route change reason...
-	
-	CFNumberRef routeChangeReasonRef = CFDictionaryGetValue (routeChangeDictionary, CFSTR(kAudioSession_AudioRouteChangeKey_Reason));
-	
-	SInt32 routeChangeReason = kAudioSessionRouteChangeReason_Unknown;
-	
-	if (routeChangeReasonRef)
-		CFNumberGetValue (routeChangeReasonRef, kCFNumberSInt32Type, &routeChangeReason);
-	
-	// extract the old route..
-	
-	CFStringRef oldRoute = CFDictionaryGetValue(routeChangeDictionary, CFSTR(kAudioSession_AudioRouteChangeKey_OldRoute));
-	
-	// pass it off to our Objective-C handler...
-	
-	[instance onAudioRouteChangedWithReason:routeChangeReason oldRoute:(__bridge NSString *)oldRoute];
-}
 
